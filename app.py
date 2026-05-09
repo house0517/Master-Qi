@@ -104,8 +104,8 @@ with st.sidebar:
         model_name = st.text_input("模型名称", value="gemini-3-flash-preview-nothinking") 
         st.info("提示：若内容输出一半停止，请尝试更换模型名称为 gemini-1.5-pro 或联系中转商确认 Token 上限。")
         # --- 在这里插入第二部分代码 ---
-    st.markdown("---") # 加一条分割线，区分配置和档案
-    st.title("📂 历史档案库")
+        st.markdown("---") # 加一条分割线，区分配置和档案
+        st.title("📂 历史档案库")
     
     try:
         conn = sqlite3.connect('fortunes.db')
