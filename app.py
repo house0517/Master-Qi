@@ -1,3 +1,30 @@
+import sqlite3
+import datetime
+
+# --- 初始化数据库 ---
+def init_db():
+    conn = sqlite3.connect('fortunes.db')
+    c = conn.cursor()
+    # 创建表：存储姓名、生辰、主报告内容、追问历史和时间
+    c.execute('''CREATE TABLE IF NOT EXISTS records 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  name TEXT, birth_info TEXT, report TEXT, history TEXT, date TEXT)''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# 保存记录的函数
+def save_to_db(name, birth, report, history):
+    conn = sqlite3.connect('fortunes.db')
+    c = conn.cursor()
+    # 将追问历史列表转为字符串存储
+    history_str = str(history)
+    date_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    c.execute("INSERT INTO records (name, birth_info, report, history, date) VALUES (?, ?, ?, ?, ?)",
+              (name, birth, report, history_str, date_now))
+    conn.commit()
+    conn.close()
 import streamlit as st
 from openai import OpenAI
 
@@ -76,7 +103,41 @@ with st.sidebar:
         # 建议默认使用标准 pro 模型，输出质量和长度最有保障
         model_name = st.text_input("模型名称", value="gemini-3-flash-preview-nothinking") 
         st.info("提示：若内容输出一半停止，请尝试更换模型名称为 gemini-1.5-pro 或联系中转商确认 Token 上限。")
-
+        # --- 在这里插入第二部分代码 ---
+    st.markdown("---") # 加一条分割线，区分配置和档案
+    st.title("📂 历史档案库")
+    
+    try:
+        conn = sqlite3.connect('fortunes.db')
+        c = conn.cursor()
+        c.execute("SELECT name, date, id FROM records ORDER BY id DESC")
+        history_list = c.fetchall()
+        conn.close()
+        
+        if history_list:
+            # 创建下拉菜单
+            options = {f"{row[0]} ({row[1]})": row[2] for row in history_list}
+            selected_label = st.selectbox("选择往期档案", ["-- 请选择 --"] + list(options.keys()))
+            
+            if selected_label != "-- 请选择 --":
+                if st.button("一键加载档案"):
+                    record_id = options[selected_label]
+                    conn = sqlite3.connect('fortunes.db')
+                    c = conn.cursor()
+                    c.execute("SELECT report, history FROM records WHERE id=?", (record_id,))
+                    res = c.fetchone()
+                    conn.close()
+                    
+                    # 恢复数据到当前网页
+                    st.session_state.main_report = res[0]
+                    st.session_state.chat_history = eval(res[1]) 
+                    st.success(f"已加载 {selected_label} 的档案")
+                    st.rerun()
+        else:
+            st.caption("暂无历史记录")
+    except Exception as e:
+        st.caption("档案库初始化中...")
+        
     # --- 4. 初始化 Session State ---
 if "main_report" not in st.session_state:
         st.session_state.main_report = ""
@@ -107,7 +168,13 @@ if st.button("开始深度能量推演 (Iniciar Lectura)"):
             client = OpenAI(api_key=api_key, base_url=base_url, timeout=600.0)
             placeholder = st.empty()
             current_full_text = ""
-            
+
+            # --- 第三部分核心代码：保存主报告 ---
+            try:
+                    save_to_db(name, birth_info, current_full_text, st.session_state.chat_history)
+                    st.success("能量报告生成完毕，并已自动存入档案库。")
+            except Exception as e:
+                    st.warning(f"报告已生成，但档案存入失败: {e}")
             # 强化 Prompt，要求 AI 尽量一次性给足
             rich_initial_prompt = f"""
             请为命主【{name}】（{gender}）进行深度解盘。
