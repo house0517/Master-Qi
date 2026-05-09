@@ -161,7 +161,7 @@ if st.session_state.main_report:
                 st.write(chat['answer'])
 
         with st.form("follow_up_form"):
-            user_question = st.text_input("针对以上报告，客户还有什么想问的？(如未出完，请回复“继续”)")
+            user_question = st.text_area("针对以上报告，客户还有什么想问的？", placeholder="您可以输入更详细的背景或追加问题...", height=150)
             submit_follow_up = st.form_submit_button("发送指令/追问")
 
         if submit_follow_up and user_question:
