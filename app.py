@@ -109,7 +109,7 @@ if "main_report" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "current_prompt_type" not in st.session_state:
-    st.session_state.current_prompt_type = "single"  # 用于记忆当前对话使用的是哪套 Prompt
+    st.session_state.current_prompt_type = "single"
 
 # --- 4. 建立 Google Sheets 连接 ---
 @st.cache_resource
@@ -117,7 +117,6 @@ def get_db_connection():
     try:
         return st.connection("gsheets", type=GSheetsConnection)
     except Exception as e:
-        st.error(f"云端表格连接器初始化失败: {e}")
         return None
 
 conn = get_db_connection()
@@ -125,13 +124,15 @@ conn = get_db_connection()
 def load_all_records():
     if conn:
         try:
+            # TTL=0 确保每次拿到的都是最新的云端表
             df = conn.read(ttl="0d")
-            if not df.empty:
+            if df is not None and not df.empty:
                 df.columns = [str(c).strip().lower() for c in df.columns]
-            return df
+                return df
         except Exception as e:
-            return pd.DataFrame()
-    return pd.DataFrame()
+            pass
+    # 彻底兜底：如果读取异常或空表，返回一个包含标准列名的空白 DataFrame
+    return pd.DataFrame(columns=["id", "name", "birth_info", "report", "history", "date"])
 
 def save_to_sheets(name, birth, report, history):
     if conn:
@@ -141,6 +142,7 @@ def save_to_sheets(name, birth, report, history):
             date_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             
             new_row = {
+                "id": len(df) + 1,
                 "name": str(name),
                 "birth_info": str(birth),
                 "report": str(report),
@@ -148,7 +150,8 @@ def save_to_sheets(name, birth, report, history):
                 "date": date_now
             }
             
-            if not df.empty and ("name" in df.columns and "birth_info" in df.columns):
+            # 安全检查是否存在同名同生辰的已有客户
+            if not df.empty and "name" in df.columns and "birth_info" in df.columns:
                 match = (df["name"].astype(str) == str(name)) & (df["birth_info"].astype(str) == str(birth))
                 if match.any():
                     idx = df[match].index[0]
@@ -156,17 +159,15 @@ def save_to_sheets(name, birth, report, history):
                     df.at[idx, "history"] = history_str
                     df.at[idx, "date"] = date_now
                 else:
-                    new_row["id"] = len(df) + 1
                     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             else:
-                new_row["id"] = 1
                 df = pd.DataFrame([new_row])
-                df.columns = ["name", "birth_info", "report", "history", "date", "id"]
             
+            # 覆写回云端表格
             conn.update(data=df)
-            st.toast("⚡ 档案已同步至永久云端库")
+            st.toast("⚡ 档案已成功同步至永久云端库")
         except Exception as e:
-            st.warning(f"云端同步失败: {e}")
+            st.warning(f"云端同步失败，请检查共享写入权限: {e}")
 
 # --- 5. 侧边栏：配置与云端档案 ---
 with st.sidebar:
@@ -179,27 +180,34 @@ with st.sidebar:
     st.title("📂 永久云端档案库")
     
     df_records = load_all_records()
-    if not df_records.empty and "name" in df_records.columns:
-        options = {f"{row['name']} ({row['date']})": idx for idx, row in df_records.iterrows() if pd.notna(row['name'])}
-        selected_label = st.selectbox("调取云端往期档案", ["-- 请选择 --"] + list(options.keys()))
+    # 彻底隔离空数据状态，绝不报 KeyError
+    if not df_records.empty and "name" in df_records.columns and df_records["name"].notna().any():
+        options = {}
+        for idx, row in df_records.iterrows():
+            if pd.notna(row['name']) and str(row['name']).strip() != "":
+                label = f"{row['name']} ({row.get('date', '未知时间')})"
+                options[label] = idx
         
-        if selected_label != "-- 请选择 --":
-            if st.button("一键加载档案"):
-                row_data = df_records.loc[options[selected_label]]
-                st.session_state.main_report = row_data['report']
-                try:
-                    st.session_state.chat_history = ast.literal_eval(row_data['history'])
-                except:
-                    st.session_state.chat_history = []
-                # 模糊判断恢复出来的档案属于单盘还是合盘
-                if "&" in str(row_data['name']):
-                    st.session_state.current_prompt_type = "double"
-                else:
-                    st.session_state.current_prompt_type = "single"
-                st.success(f"已恢复 {selected_label} 的历史档案")
-                st.rerun()
+        if options:
+            selected_label = st.selectbox("调取云端往期档案", ["-- 请选择 --"] + list(options.keys()))
+            if selected_label != "-- 请选择 --":
+                if st.button("一键加载档案"):
+                    row_data = df_records.loc[options[selected_label]]
+                    st.session_state.main_report = str(row_data['report'])
+                    try:
+                        st.session_state.chat_history = ast.literal_eval(str(row_data['history']))
+                    except:
+                        st.session_state.chat_history = []
+                    if "&" in str(row_data['name']):
+                        st.session_state.current_prompt_type = "double"
+                    else:
+                        st.session_state.current_prompt_type = "single"
+                    st.success(f"已恢复 {selected_label} 的历史档案")
+                    st.rerun()
+        else:
+            st.caption("📂 云端档案库暂无有效记录")
     else:
-        st.caption("云端档案库为空或正在等待配置...")
+        st.caption("💡 档案库目前为空，测算一次后会自动同步")
 
 # --- 6. 主界面 ---
 st.title("🕯️ Maestro Qi: Alquimia de Destino")
@@ -263,7 +271,7 @@ with tab_double:
         chosen_prompt = PROMPT_DOUBLE
         st.session_state.current_prompt_type = "double"
 
-# --- 7. 动态匹配执行与存档逻辑 ---
+# --- 7. 动态匹配执行与云端同步 ---
 if user_payload and chosen_prompt:
     if not api_key:
         st.error("请先输入 API Key")
@@ -296,14 +304,15 @@ if user_payload and chosen_prompt:
                 placeholder.markdown(current_full_text)
                 st.session_state.main_report = current_full_text
                 
+                # 执行永久云端保存
                 save_to_sheets(final_name, final_birth, current_full_text, st.session_state.chat_history)
-                st.success("推演报告已成功存档至云端。")
+                st.success("推演报告已成功存档至永久云端库。")
                 st.rerun()
 
         except Exception as e:
             st.error(f"推演错误：{e}")
 
-# --- 8. 追加提问逻辑 (根据当前激活的模式动态调用 Prompt) ---
+# --- 8. 追加提问逻辑 ---
 if st.session_state.main_report:
     st.markdown("---")
     st.subheader("📜 核心能量推演报告 (Reporte Principal)")
@@ -325,7 +334,6 @@ if st.session_state.main_report:
     if submit_follow_up and user_question:
         client = OpenAI(api_key=api_key, base_url=base_url, timeout=600.0)
         
-        # 根据会话记忆，动态决定追问时用单盘还是合盘的指令
         active_prompt = PROMPT_DOUBLE if st.session_state.current_prompt_type == "double" else PROMPT_SINGLE
         
         messages = [
@@ -350,11 +358,10 @@ if st.session_state.main_report:
                 
                 st.session_state.chat_history.append({"question": user_question, "answer": new_answer})
                 
-                # 安全恢复本地变量用于执行保存
-                saved_name = final_name if final_name else (st.session_state.chat_history[0]['question'] if len(st.session_state.chat_history)>0 else "Cloud_User")
-                saved_birth = final_birth if final_birth else "Cloud_Birth"
-                
-                save_to_sheets(saved_name, saved_birth, st.session_state.main_report, st.session_state.chat_history)
+                # 再次同步追问内容回 Google 表格
+                save_to_sheets(final_name if final_name else "Cloud_User", 
+                               final_birth if final_birth else "Cloud_Birth", 
+                               st.session_state.main_report, st.session_state.chat_history)
                 st.rerun()
         except Exception as e:
             st.error(f"追问失败：{e}")
