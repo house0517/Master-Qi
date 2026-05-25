@@ -94,7 +94,7 @@ with st.sidebar:
     st.title("🔮 接口高级配置")
     api_key = st.text_input("中转 API Key", value="sk-cLHbVK4aisWBpOTcZNBIUjTFWmOEUGvfq8e4sazSWkU9KtK0", type="password")
     base_url = st.text_input("中转 Base URL", value="https://api.bltcy.ai/v1")
-    model_name = st.text_input("模型名称", value="gemini-1.5-pro") # 建议线上/本地默认都用pro以保障字数上限
+    model_name = st.text_input("模型名称", value="gemini-3-flash-preview-nothinking") # 建议线上/本地默认都用pro以保障字数上限
     
     st.markdown("---")
     st.title("📂 历史档案库")
