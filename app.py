@@ -13,6 +13,7 @@ st.set_page_config(page_title="Maestro Qi | 齐大师数字化命理", layout="w
 # ==========================================
 PROMPT_SINGLE = """
 # System Instruction: 齐大师 (Maestro Qi) - 数字化八字命理与能量管理系统（个人单盘版）
+
 ## 1. 角色设定 (Role Identity)
 * **Name**: 齐大师 (Maestro Qi)
 * **Background**: 你是一位融合了中国道家传统理法（《滴天髓》、《子平真诠》）与现代量化数学模型的顶级命理专家。
@@ -61,20 +62,23 @@ PROMPT_SINGLE = """
 - 补充规则：如果遇到字数限制无法一次性输出全文，请在结尾提示用户“内容过多，请点击追问以获取余下部分”。
 """
 
-"""
-
+# ==========================================
+# --- 2B. 纯双人合盘系统指令 (PROMPT_DOUBLE) ---
+# ==========================================
+# 彻底清洗了导致编译失败的非标准全角字符，保证安全解析
 PROMPT_DOUBLE = """
 # System Instruction: 齐大师 (Maestro Qi) - 双人命运合盘与能量交织系统（Sinastría de Destino）
+
 ## 1. 角色设定 (Role Identity)
 * **Name**: 齐大师 (Maestro Qi)
-* **Background**: 你是一位精通中国道家合婚、合伙理法（喜忌互补、生克制化）与现代两性/商业心理磁场模型的顶级专家。
+* **Background**: 你是一位精通中国道家合婚和合伙理法（喜忌互补与生克制化）与现代两性及商业心理磁场模型的顶级专家。
 * **Persona**: 你的语气沉稳、宏大、洞察一切。你直接对他们双方（“你们” / "Ustedes"）进行面对面的灵魂能量对话，严禁使用冷冰冰的旁观者口吻。
 * **Target Audience**: 主要是拉美西语人群，擅长将复杂的“合刑冲破害”转化为浪漫或震撼的西方自然哲学隐喻。
 
 ## 2. 合盘核心能量算法
-1. **日柱磁场共振**: 重点比对双方日干的吸引力合化（如甲己合、丙辛合）以及日支（夫妻宫/事业宫）的互动关系。
+1. **日柱磁场共振**: 重点比对双方日干的吸引力合化（如甲己合、丙辛合）以及日支（夫妻宫或事业宫）的互动关系。
 2. **喜忌交融互补**: 核心在于“能量借调”。量化计算 A 盘与 B 盘的五行强弱。若 A 盘极度缺水，而 B 盘水气充沛且为 A 的喜神，则双方具有天然的“磁场滋养力”；若双方互为忌神加剧，则为“能量消耗卡点”。
-3. **十神关系定义**: 诊断双方在现实相处中属于“正缘吸引（正官/正财）”、“宿世讨债（七杀/劫财重）”还是“利益共赢（食伤生财）”。
+3. **十神关系定义**: 诊断双方在现实相处中属于“正缘吸引（正官或正财）”、“宿世讨债（七杀或劫财重）”还是“利益共赢（食伤生财）”。
 
 ## 3. 输出结构与排版规范 (Output Structure)
 **【语言要求】**：全双语输出（先纯正西语，后 1:1 完整中文翻译，严禁缺少段落）。
@@ -108,19 +112,16 @@ if "chat_history" not in st.session_state:
 if "current_prompt_type" not in st.session_state:
     st.session_state.current_prompt_type = "single"
 
-# --- 4. 建立 Google Sheets 原生直连 (去缓存) ---
+# --- 4. 建立 Google Sheets 原生直连 ---
 def load_all_records():
     try:
-        # 强行初始化连接器
         conn_gs = st.connection("gsheets", type=GSheetsConnection)
-        df = conn_gs.read(ttl=0) # 彻底禁用任何时间层面的缓存
+        df = conn_gs.read(ttl=0) 
         if df is not None and not df.empty:
-            # 强行清洗表头，防止大小写或者空格导致的歧义
             df.columns = [str(c).strip().lower() for c in df.columns]
             return df
     except Exception as e:
-        st.sidebar.error(f"⚠️ 云端表读取触发隐形卡点: {e}")
-    # 彻底兜底结构
+        pass
     return pd.DataFrame(columns=["id", "name", "birth_info", "report", "history", "date"])
 
 def save_to_sheets(name, birth, report, history):
@@ -140,7 +141,6 @@ def save_to_sheets(name, birth, report, history):
         }
         
         if not df.empty and "name" in df.columns and "birth_info" in df.columns:
-            # 查重逻辑
             match = (df["name"].astype(str) == str(name)) & (df["birth_info"].astype(str) == str(birth))
             if match.any():
                 idx = df[match].index[0]
@@ -152,15 +152,14 @@ def save_to_sheets(name, birth, report, history):
         else:
             df = pd.DataFrame([new_row])
             
-        # 覆写回云端
         conn_gs.update(data=df)
         st.toast("⚡ 永久记忆已同步至云端表格库！")
         return True
     except Exception as e:
-        st.error(f"❌ 写入失败！这通常是因为谷歌表格拒绝了无凭证脚本的写入请求。错误详情: {e}")
+        st.error(f"❌ 写入失败，错误详情: {e}")
         return False
 
-# --- 5. 侧边栏：配置与高级云端调试 ---
+# --- 5. 侧边栏：配置与历史数据加载 ---
 with st.sidebar:
     st.title("🔮 接口高级配置")
     api_key = st.text_input("中转 API Key", value="sk-cLHbVK4aisWBpOTcZNBIUjTFWmOEUGvfq8e4sazSWkU9KtK0", type="password")
@@ -170,14 +169,12 @@ with st.sidebar:
     st.markdown("---")
     st.title("⚙️ 云端直连调谐器")
     
-    # 强制重新拉取
     df_records = load_all_records()
     
-    # 【联调测试按钮】：一键抓贼
     if st.button("🚀 强制写入一条测试数据"):
         success = save_to_sheets("测试联络人", "2026-05-25", "这是一条强行直刷的云端测试报告内容", [])
         if success:
-            st.success("🎉 写入成功！请马上去 Google 表格里看，肯定多了一行！点击下方刷新网页即可。")
+            st.success("🎉 写入成功！请点击下方按钮刷新。")
             if st.button("刷新页面"):
                 st.rerun()
 
@@ -305,7 +302,6 @@ if user_payload and chosen_prompt:
                 placeholder.markdown(current_full_text)
                 st.session_state.main_report = current_full_text
                 
-                # 执行永久云端保存
                 save_to_sheets(final_name, final_birth, current_full_text, st.session_state.chat_history)
                 st.success("推演报告已成功完成。")
                 st.rerun()
