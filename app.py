@@ -1,9 +1,8 @@
 import datetime
 import ast
+import sqlite3
 import streamlit as st
 from openai import OpenAI
-from streamlit_gsheets import GSheetsConnection
-import pandas as pd
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="Maestro Qi | 齐大师数字化命理", layout="wide", page_icon="🔮")
@@ -65,7 +64,6 @@ PROMPT_SINGLE = """
 # ==========================================
 # --- 2B. 纯双人合盘系统指令 (PROMPT_DOUBLE) ---
 # ==========================================
-# 彻底清洗了导致编译失败的非标准全角字符，保证安全解析
 PROMPT_DOUBLE = """
 # System Instruction: 齐大师 (Maestro Qi) - 双人命运合盘与能量交织系统（Sinastría de Destino）
 
@@ -112,54 +110,55 @@ if "chat_history" not in st.session_state:
 if "current_prompt_type" not in st.session_state:
     st.session_state.current_prompt_type = "single"
 
-# --- 4. 建立 Google Sheets 原生直连 ---
-def load_all_records():
-    try:
-        conn_gs = st.connection("gsheets", type=GSheetsConnection)
-        df = conn_gs.read(ttl=0) 
-        if df is not None and not df.empty:
-            df.columns = [str(c).strip().lower() for c in df.columns]
-            return df
-    except Exception as e:
-        pass
-    return pd.DataFrame(columns=["id", "name", "birth_info", "report", "history", "date"])
+# --- 4. SQLite 本地数据库建表初始化 ---
+def init_db():
+    conn = sqlite3.connect('fortunes.db')
+    c = conn.cursor()
+    # 创建本地轻量表结构
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            birth_info TEXT,
+            report TEXT,
+            history TEXT,
+            date TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-def save_to_sheets(name, birth, report, history):
+init_db() # 启动时确保数据库就绪
+
+def save_to_sqlite(name, birth, report, history):
     try:
-        conn_gs = st.connection("gsheets", type=GSheetsConnection)
-        df = load_all_records()
+        conn = sqlite3.connect('fortunes.db')
+        c = conn.cursor()
         history_str = str(history)
         date_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        new_row = {
-            "id": len(df) + 1,
-            "name": str(name),
-            "birth_info": str(birth),
-            "report": str(report),
-            "history": history_str,
-            "date": date_now
-        }
+        # 查重：看有没有同名同生辰的已有客户档案
+        c.execute("SELECT id FROM records WHERE name=? AND birth_info=?", (str(name), str(birth)))
+        row = c.fetchone()
         
-        if not df.empty and "name" in df.columns and "birth_info" in df.columns:
-            match = (df["name"].astype(str) == str(name)) & (df["birth_info"].astype(str) == str(birth))
-            if match.any():
-                idx = df[match].index[0]
-                df.at[idx, "report"] = str(report)
-                df.at[idx, "history"] = history_str
-                df.at[idx, "date"] = date_now
-            else:
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        if row:
+            # 存在则覆写更新
+            c.execute("UPDATE records SET report=?, history=?, date=? WHERE id=?", 
+                      (str(report), history_str, date_now, row[0]))
         else:
-            df = pd.DataFrame([new_row])
-            
-        conn_gs.update(data=df)
-        st.toast("⚡ 永久记忆已同步至云端表格库！")
+            # 不存在则插入新行
+            c.execute("INSERT INTO records (name, birth_info, report, history, date) VALUES (?, ?, ?, ?, ?)",
+                      (str(name), str(birth), str(report), history_str, date_now))
+        
+        conn.commit()
+        conn.close()
+        st.toast("⚡ 齐大师永久记忆已同步至本地数据库！")
         return True
     except Exception as e:
-        st.error(f"❌ 写入失败，错误详情: {e}")
+        st.error(f"本地数据库写入失败: {e}")
         return False
 
-# --- 5. 侧边栏：配置与历史数据加载 ---
+# --- 5. 侧边栏：配置与历史数据加载 (通过本地 SQLite) ---
 with st.sidebar:
     st.title("🔮 接口高级配置")
     api_key = st.text_input("中转 API Key", value="sk-cLHbVK4aisWBpOTcZNBIUjTFWmOEUGvfq8e4sazSWkU9KtK0", type="password")
@@ -167,47 +166,43 @@ with st.sidebar:
     model_name = st.text_input("模型名称", value="gemini-3-flash-preview-nothinking") 
     
     st.markdown("---")
-    st.title("⚙️ 云端直连调谐器")
+    st.title("📂 永久云端档案库 (SQLite)")
     
-    df_records = load_all_records()
+    # 从本地库拉取下拉单数据
+    conn = sqlite3.connect('fortunes.db')
+    c = conn.cursor()
+    c.execute("SELECT name, date, id FROM records ORDER BY id DESC")
+    history_list = c.fetchall()
+    conn.close()
     
-    if st.button("🚀 强制写入一条测试数据"):
-        success = save_to_sheets("测试联络人", "2026-05-25", "这是一条强行直刷的云端测试报告内容", [])
-        if success:
-            st.success("🎉 写入成功！请点击下方按钮刷新。")
-            if st.button("刷新页面"):
-                st.rerun()
-
-    st.markdown("---")
-    st.title("📂 永久云端档案库")
-    
-    if not df_records.empty and "name" in df_records.columns and df_records["name"].notna().any():
-        options = {}
-        for idx, row in df_records.iterrows():
-            if pd.notna(row['name']) and str(row['name']).strip() != "":
-                label = f"{row['name']} ({row.get('date', '未知时间')})"
-                options[label] = idx
+    if history_list:
+        options = {f"{row[0]} ({row[1]})": row[2] for row in history_list}
+        selected_label = st.selectbox("调取云端往期档案", ["-- 请选择 --"] + list(options.keys()))
         
-        if options:
-            selected_label = st.selectbox("调取云端往期档案", ["-- 请选择 --"] + list(options.keys()))
-            if selected_label != "-- 请选择 --":
-                if st.button("一键加载档案"):
-                    row_data = df_records.loc[options[selected_label]]
-                    st.session_state.main_report = str(row_data['report'])
+        if selected_label != "-- 请选择 --":
+            if st.button("一键加载档案"):
+                record_id = options[selected_label]
+                conn = sqlite3.connect('fortunes.db')
+                c = conn.cursor()
+                c.execute("SELECT report, history FROM records WHERE id=?", (record_id,))
+                res = c.fetchone()
+                conn.close()
+                
+                if res:
+                    st.session_state.main_report = res[0]
                     try:
-                        st.session_state.chat_history = ast.literal_eval(str(row_data['history']))
+                        st.session_state.chat_history = ast.literal_eval(res[1])
                     except:
                         st.session_state.chat_history = []
-                    if "&" in str(row_data['name']):
+                    
+                    if "&" in selected_label:
                         st.session_state.current_prompt_type = "double"
                     else:
                         st.session_state.current_prompt_type = "single"
                     st.success(f"已恢复 {selected_label} 的历史档案")
                     st.rerun()
-        else:
-            st.caption("📂 云端档案库暂无有效记录")
     else:
-        st.caption("💡 档案库目前为空，成功测算一次后会自动同步")
+        st.caption("💡 暂无历史测算档案，测算一次后会自动显示。")
 
 # --- 6. 主界面 ---
 st.title("🕯️ Maestro Qi: Alquimia de Destino")
@@ -269,7 +264,7 @@ with tab_double:
         chosen_prompt = PROMPT_DOUBLE
         st.session_state.current_prompt_type = "double"
 
-# --- 7. 动态匹配执行与云端同步 ---
+# --- 7. 动态匹配执行与数据本地持久化 ---
 if user_payload and chosen_prompt:
     if not api_key:
         st.error("请先输入 API Key")
@@ -302,8 +297,9 @@ if user_payload and chosen_prompt:
                 placeholder.markdown(current_full_text)
                 st.session_state.main_report = current_full_text
                 
-                save_to_sheets(final_name, final_birth, current_full_text, st.session_state.chat_history)
-                st.success("推演报告已成功完成。")
+                # 安全执行本地 SQLite 档案保存
+                save_to_sqlite(final_name, final_birth, current_full_text, st.session_state.chat_history)
+                st.success("推演报告已成功保存至本地库。")
                 st.rerun()
 
         except Exception as e:
@@ -352,7 +348,9 @@ if st.session_state.main_report:
                 )
                 new_answer = resp.choices[0].message.content
                 st.session_state.chat_history.append({"question": user_question, "answer": new_answer})
-                save_to_sheets(final_name if final_name else "Cloud_User", final_birth if final_birth else "Cloud_Birth", st.session_state.main_report, st.session_state.chat_history)
+                
+                # 连同追问一起同步更新至本地 SQLite
+                save_to_sqlite(final_name if final_name else "Cloud_User", final_birth if final_birth else "Cloud_Birth", st.session_state.main_report, st.session_state.chat_history)
                 st.rerun()
         except Exception as e:
             st.error(f"追问失败：{e}")
