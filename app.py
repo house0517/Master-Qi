@@ -13,7 +13,6 @@ st.set_page_config(page_title="Maestro Qi | 齐大师数字化命理", layout="w
 # ==========================================
 PROMPT_SINGLE = """
 # System Instruction: 齐大师 (Maestro Qi) - 数字化八字命理与能量管理系统（个人单盘版）
-
 ## 1. 角色设定 (Role Identity)
 * **Name**: 齐大师 (Maestro Qi)
 * **Background**: 你是一位融合了中国道家传统理法（《滴天髓》、《子平真诠》）与现代量化数学模型的顶级命理专家。
@@ -62,12 +61,10 @@ PROMPT_SINGLE = """
 - 补充规则：如果遇到字数限制无法一次性输出全文，请在结尾提示用户“内容过多，请点击追问以获取余下部分”。
 """
 
-# ==========================================
-# --- 2B. 纯双人合盘系统指令 (PROMPT_DOUBLE) ---
-# ==========================================
+"""
+
 PROMPT_DOUBLE = """
 # System Instruction: 齐大师 (Maestro Qi) - 双人命运合盘与能量交织系统（Sinastría de Destino）
-
 ## 1. 角色设定 (Role Identity)
 * **Name**: 齐大师 (Maestro Qi)
 * **Background**: 你是一位精通中国道家合婚、合伙理法（喜忌互补、生克制化）与现代两性/商业心理磁场模型的顶级专家。
@@ -111,76 +108,82 @@ if "chat_history" not in st.session_state:
 if "current_prompt_type" not in st.session_state:
     st.session_state.current_prompt_type = "single"
 
-# --- 4. 建立 Google Sheets 连接 ---
-@st.cache_resource
-def get_db_connection():
-    try:
-        return st.connection("gsheets", type=GSheetsConnection)
-    except Exception as e:
-        return None
-
-conn = get_db_connection()
-
+# --- 4. 建立 Google Sheets 原生直连 (去缓存) ---
 def load_all_records():
-    if conn:
-        try:
-            # TTL=0 确保每次拿到的都是最新的云端表
-            df = conn.read(ttl="0d")
-            if df is not None and not df.empty:
-                df.columns = [str(c).strip().lower() for c in df.columns]
-                return df
-        except Exception as e:
-            pass
-    # 彻底兜底：如果读取异常或空表，返回一个包含标准列名的空白 DataFrame
+    try:
+        # 强行初始化连接器
+        conn_gs = st.connection("gsheets", type=GSheetsConnection)
+        df = conn_gs.read(ttl=0) # 彻底禁用任何时间层面的缓存
+        if df is not None and not df.empty:
+            # 强行清洗表头，防止大小写或者空格导致的歧义
+            df.columns = [str(c).strip().lower() for c in df.columns]
+            return df
+    except Exception as e:
+        st.sidebar.error(f"⚠️ 云端表读取触发隐形卡点: {e}")
+    # 彻底兜底结构
     return pd.DataFrame(columns=["id", "name", "birth_info", "report", "history", "date"])
 
 def save_to_sheets(name, birth, report, history):
-    if conn:
-        try:
-            df = load_all_records()
-            history_str = str(history)
-            date_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            
-            new_row = {
-                "id": len(df) + 1,
-                "name": str(name),
-                "birth_info": str(birth),
-                "report": str(report),
-                "history": history_str,
-                "date": date_now
-            }
-            
-            # 安全检查是否存在同名同生辰的已有客户
-            if not df.empty and "name" in df.columns and "birth_info" in df.columns:
-                match = (df["name"].astype(str) == str(name)) & (df["birth_info"].astype(str) == str(birth))
-                if match.any():
-                    idx = df[match].index[0]
-                    df.at[idx, "report"] = str(report)
-                    df.at[idx, "history"] = history_str
-                    df.at[idx, "date"] = date_now
-                else:
-                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    try:
+        conn_gs = st.connection("gsheets", type=GSheetsConnection)
+        df = load_all_records()
+        history_str = str(history)
+        date_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        new_row = {
+            "id": len(df) + 1,
+            "name": str(name),
+            "birth_info": str(birth),
+            "report": str(report),
+            "history": history_str,
+            "date": date_now
+        }
+        
+        if not df.empty and "name" in df.columns and "birth_info" in df.columns:
+            # 查重逻辑
+            match = (df["name"].astype(str) == str(name)) & (df["birth_info"].astype(str) == str(birth))
+            if match.any():
+                idx = df[match].index[0]
+                df.at[idx, "report"] = str(report)
+                df.at[idx, "history"] = history_str
+                df.at[idx, "date"] = date_now
             else:
-                df = pd.DataFrame([new_row])
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        else:
+            df = pd.DataFrame([new_row])
             
-            # 覆写回云端表格
-            conn.update(data=df)
-            st.toast("⚡ 档案已成功同步至永久云端库")
-        except Exception as e:
-            st.warning(f"云端同步失败，请检查共享写入权限: {e}")
+        # 覆写回云端
+        conn_gs.update(data=df)
+        st.toast("⚡ 永久记忆已同步至云端表格库！")
+        return True
+    except Exception as e:
+        st.error(f"❌ 写入失败！这通常是因为谷歌表格拒绝了无凭证脚本的写入请求。错误详情: {e}")
+        return False
 
-# --- 5. 侧边栏：配置与云端档案 ---
+# --- 5. 侧边栏：配置与高级云端调试 ---
 with st.sidebar:
     st.title("🔮 接口高级配置")
     api_key = st.text_input("中转 API Key", value="sk-cLHbVK4aisWBpOTcZNBIUjTFWmOEUGvfq8e4sazSWkU9KtK0", type="password")
     base_url = st.text_input("中转 Base URL", value="https://api.bltcy.ai/v1")
-    model_name = st.text_input("模型名称", value="gemini-3-flash-preview-nothinking") 
+    model_name = st.text_input("模型名称", value="gemini-1.5-pro") 
     
+    st.markdown("---")
+    st.title("⚙️ 云端直连调谐器")
+    
+    # 强制重新拉取
+    df_records = load_all_records()
+    
+    # 【联调测试按钮】：一键抓贼
+    if st.button("🚀 强制写入一条测试数据"):
+        success = save_to_sheets("测试联络人", "2026-05-25", "这是一条强行直刷的云端测试报告内容", [])
+        if success:
+            st.success("🎉 写入成功！请马上去 Google 表格里看，肯定多了一行！点击下方刷新网页即可。")
+            if st.button("刷新页面"):
+                st.rerun()
+
     st.markdown("---")
     st.title("📂 永久云端档案库")
     
-    df_records = load_all_records()
-    # 彻底隔离空数据状态，绝不报 KeyError
     if not df_records.empty and "name" in df_records.columns and df_records["name"].notna().any():
         options = {}
         for idx, row in df_records.iterrows():
@@ -207,7 +210,7 @@ with st.sidebar:
         else:
             st.caption("📂 云端档案库暂无有效记录")
     else:
-        st.caption("💡 档案库目前为空，测算一次后会自动同步")
+        st.caption("💡 档案库目前为空，成功测算一次后会自动同步")
 
 # --- 6. 主界面 ---
 st.title("🕯️ Maestro Qi: Alquimia de Destino")
@@ -219,7 +222,6 @@ final_birth = ""
 user_payload = ""
 chosen_prompt = ""
 
-# --- 选项卡1：个人单盘 ---
 with tab_single:
     col1, col2 = st.columns(2)
     with col1:
@@ -237,7 +239,6 @@ with tab_single:
         chosen_prompt = PROMPT_SINGLE
         st.session_state.current_prompt_type = "single"
 
-# --- 选项卡2：双人合盘 ---
 with tab_double:
     st.markdown("### 👤 对象 A (Persona A)")
     col_a1, col_a2 = st.columns(2)
@@ -306,7 +307,7 @@ if user_payload and chosen_prompt:
                 
                 # 执行永久云端保存
                 save_to_sheets(final_name, final_birth, current_full_text, st.session_state.chat_history)
-                st.success("推演报告已成功存档至永久云端库。")
+                st.success("推演报告已成功完成。")
                 st.rerun()
 
         except Exception as e:
@@ -333,7 +334,6 @@ if st.session_state.main_report:
 
     if submit_follow_up and user_question:
         client = OpenAI(api_key=api_key, base_url=base_url, timeout=600.0)
-        
         active_prompt = PROMPT_DOUBLE if st.session_state.current_prompt_type == "double" else PROMPT_SINGLE
         
         messages = [
@@ -355,13 +355,8 @@ if st.session_state.main_report:
                     max_tokens=4000
                 )
                 new_answer = resp.choices[0].message.content
-                
                 st.session_state.chat_history.append({"question": user_question, "answer": new_answer})
-                
-                # 再次同步追问内容回 Google 表格
-                save_to_sheets(final_name if final_name else "Cloud_User", 
-                               final_birth if final_birth else "Cloud_Birth", 
-                               st.session_state.main_report, st.session_state.chat_history)
+                save_to_sheets(final_name if final_name else "Cloud_User", final_birth if final_birth else "Cloud_Birth", st.session_state.main_report, st.session_state.chat_history)
                 st.rerun()
         except Exception as e:
             st.error(f"追问失败：{e}")
