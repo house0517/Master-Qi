@@ -163,9 +163,9 @@ def save_to_sqlite(name, birth, report, history):
 # --- 5. 侧边栏：配置与历史数据加载 (通过本地 SQLite) ---
 with st.sidebar:
     st.title("🔮 接口高级配置")
-    api_key = st.text_input("中转 API Key", value="sk-cLHbVK4aisWBpOTcZNBIUjTFWmOEUGvfq8e4sazSWkU9KtK0", type="password")
-    base_url = st.text_input("中转 Base URL", value="https://api.bltcy.ai/v1")
-    model_name = st.text_input("模型名称", value="gemini-3-flash-preview-nothinking") 
+    api_key = st.text_input("中转 API Key", value="sk-ODz424VjJUMnOd1LWCSuP37w4KyrZhiOCzOweKRg63r4PY9w", type="password")
+    base_url = st.text_input("中转 Base URL", value="https://api.moshushi.xyz/v1")
+    model_name = st.text_input("模型名称", value="gpt-5.5") 
     
     st.markdown("---")
     st.title("📂 永久云端档案库 (SQLite)")
