@@ -32,6 +32,10 @@ PROMPT_SINGLE = """
 * **Target Audience**: 主要是母语为西班牙语的群体（如拉美女性）。你极其擅长将深奥的八字术语转化为她们能深刻共鸣的自然隐喻。
 
 ## 2. 底层核心算法 (Core Logic)
+### 🔒 命理体系铁律（最高优先级，违者作废）
+- 本系统【只用中国八字四柱命理】（天干地支、五行十神、纳音、大运流年）。
+- 【绝对禁止】使用西方星座占星（如白羊座、天蝎座、上升星座、行星、塔罗等）作为分析依据或主体内容。
+- 即使用户【没有填写任何具体诉求】，也必须老老实实基于其【生辰八字】进行全面综合命理推演，绝对不允许因为诉求为空就转去聊星座、性格泛谈或通用鸡汤。
 ### A. 定盘与排盘
 - **绝对信任输入**: 忽略自动换算，直接读取用户提供的四柱干支。
 - **真太阳时校准**: 若用户提供出生地，需在后台微调起运时间。
@@ -99,6 +103,10 @@ PROMPT_DOUBLE = """
 * **Target Audience**: 主要是拉美西语人群，擅长将复杂的“合刑冲破害”转化为浪漫或震撼的西方自然哲学隐喻。
 
 ## 2. 合盘核心能量算法
+### 🔒 命理体系铁律（最高优先级，违者作废）
+- 本系统【只用中国八字四柱合盘命理】（双方天干地支、五行喜忌、十神生克、纳音、大运流年）。
+- 【绝对禁止】使用西方星座占星（如星座配对、上升星座、行星相位、塔罗等）作为分析依据或主体内容。
+- 即使用户【没有填写任何具体合盘诉求】，也必须基于两人的【生辰八字】进行全面综合合盘推演，绝对不允许因为诉求为空就转去聊星座配对、性格泛谈或通用鸡汤。
 1. **日柱磁场共振**: 重点比对双方日干的吸引力合化（如甲己合、丙辛合）以及日支（夫妻宫或事业宫）的互动关系。
 2. **喜忌交融互补**: 核心在于“能量借调”。量化计算 A 盘与 B 盘的五行强弱。若 A 盘极度缺水，而 B 盘水气充沛且为 A 的喜神，则双方具有天然的“磁场滋养力”；若双方互为忌神加剧，则为“能量消耗卡点”。
 3. **十神关系定义**: 诊断双方在现实相处中属于“正缘吸引（正官或正财）”、“宿世讨债（七杀或劫财重）”还是“利益共赢（食伤生财）”。
@@ -182,15 +190,25 @@ def save_to_sqlite(name, birth, report, history):
 # --- 5. 侧边栏 ---
 with st.sidebar:
     st.title("🔮 接口高级配置")
-    # 【已按要求锁死】：全量默认配置更换为你发我的最新可用中转数据
-    api_key = st.text_input("中转 API Key", value="sk-EgYcuA4dwRVgaTch4qw8Ebmqb2qAkwLNaDJmpsfOZB0O1GNr", type="password")
-    base_url = st.text_input("中转 Base URL", value="https://api.jiucaihezi.studio/v1")
-    model_name = st.text_input("模型名称", value="gpt-5.5") 
-    
+
+    # 【完整版深度推演引擎】：慢而强，用于完整双语深度报告
+    st.subheader("🧠 完整版深度推演引擎")
+    api_key_full = st.text_input("完整版 API Key", value="sk-EgYcuA4dwRVgaTch4qw8Ebmqb2qAkwLNaDJmpsfOZB0O1GNr", type="password", key="api_key_full")
+    base_url_full = st.text_input("完整版 Base URL", value="https://api.jiucaihezi.studio/v1", key="base_url_full")
+    model_full = st.text_input("完整版模型名称", value="gpt-5.5", key="model_full")
+
+    st.markdown("---")
+
+    # 【直播快速简评引擎】：快而轻，用于直播现场 PARTE 0 简评
+    st.subheader("⚡ 直播快速简评引擎")
+    api_key_live = st.text_input("快速版 API Key", value="sk-cLHbVK4aisWBpOTcZNBIUjTFWmOEUGvfq8e4sazSWkU9KtK0", type="password", key="api_key_live")
+    base_url_live = st.text_input("快速版 Base URL", value="https://api.bltcy.ai/v1", key="base_url_live")
+    model_live = st.text_input("快速版模型名称", value="gemini-3-flash-preview-nothinking", key="model_live")
+
     st.markdown("---")
     # 【直播功能开关组件】
     st.subheader("📺 直播间推流设置")
-    is_live_mode = st.toggle("开启直播专用简评 (PARTE 0)", value=True, help="开启后，AI会在报告最前方额外输出一段1000字以内、一句一段、纯中文的极简生肖与命理点评，并自带钩子文案及核心诉求解答。")
+    is_live_mode = st.toggle("开启直播专用简评模式 (PARTE 0)", value=True, help="开启=用快速模型(Gemini Flash)仅输出1000字以内纯中文极简简评，直播现场用；关闭=用完整版模型(gpt-5.5)输出完整深度双语报告。")
     
     st.markdown("---")
     st.title("📂 永久档案库")
@@ -253,7 +271,9 @@ with tab_single:
     if st.button("开始深度个人能量推演 (Iniciar Lectura Individual)"):
         final_name = name_s
         final_birth = birth_s
-        user_payload = f"【单盘请求】姓名：{name_s}, 性别：{gender_s}, 生辰：{birth_s}, 出生地：{place_s}, 诉求：{focus_s}"
+        # 诉求为空时，自动转为八字全面综合测算，绝不允许跑偏成星座占星
+        focus_final_s = focus_s.strip() if focus_s.strip() else "用户未指定具体问题，请基于其八字四柱进行【全面综合命理测算】，重点覆盖事业财富、感情婚姻、健康、2026流年走向，绝对围绕生辰八字展开。"
+        user_payload = f"【单盘请求】姓名：{name_s}, 性别：{gender_s}, 生辰：{birth_s}, 出生地：{place_s}, 诉求：{focus_final_s}"
         chosen_prompt = PROMPT_SINGLE
         st.session_state.current_prompt_type = "single"
 
@@ -281,38 +301,46 @@ with tab_double:
     if st.button("开始双人命运合盘推演 (Iniciar Sinastría)"):
         final_name = f"{name_a} & {name_b}"
         final_birth = f"A:{birth_a} | B:{birth_b}"
+        # 诉求为空时，自动转为双人八字合盘综合测算，绝不允许跑偏成星座配对
+        focus_final_d = focus_d.strip() if focus_d.strip() else "用户未指定具体问题，请基于两人八字四柱进行【全面综合合盘测算】，重点覆盖两人磁场契合度、感情婚姻走向、是否适合合伙、2026相处流年，绝对围绕双方生辰八字展开。"
         user_payload = (
             f"【合盘请求】\n"
             f"对象A：姓名 {name_a}, 性别 {gender_a}, 生辰 {birth_a}, 出生地 {place_a}\n"
             f"对象B：姓名 {name_b}, 性别 {gender_b}, 生辰 {birth_b}, 出生地 {place_b}\n"
-            f"合盘最核心诉求：{focus_d}"
+            f"合盘最核心诉求：{focus_final_d}"
         )
         chosen_prompt = PROMPT_DOUBLE
         st.session_state.current_prompt_type = "double"
 
 # --- 7. 动态匹配执行与数据持久化 ---
 if user_payload and chosen_prompt:
-    if not api_key:
-        st.error("请先输入 API Key")
+    # 根据直播开关，选择对应引擎的 Key / URL / 模型
+    if is_live_mode:
+        active_key, active_url, active_model = api_key_live, base_url_live, model_live
+    else:
+        active_key, active_url, active_model = api_key_full, base_url_full, model_full
+
+    if not active_key:
+        st.error("请先在侧边栏填入对应引擎的 API Key")
     else:
         st.session_state.chat_history = []
         st.session_state.main_report = "" 
         
         # 动态拼接直播间模式附加指令
-        live_constraint = ""
         if is_live_mode:
-            live_constraint = "\n\n⚠️【重要提醒】：当前处于直播间快速推流模式下，你必须首先输出【### 📜 PARTE 0: 直播总体简单评价】模块。确保满足纯中文、1000字以内、一句一段（段间空行）、直白通俗、明确包含生肖与纳音五行属性、精准解答核心具体诉求以及自带转化钩子文案的要求！"
+            live_constraint = "\n\n⚠️【重要提醒：直播快速简评模式】：当前由直播快速引擎驱动，你【只需输出】【### 📜 PARTE 0: 直播总体简单评价】这一个模块，严禁输出 PARTE I/II/III/IV 等任何后续深度模块。务必满足：纯中文、1000字以内、一句一段（段间空行）、直白通俗、明确包含生肖与纳音五行属性、精准解答核心具体诉求、自带转化钩子文案。"
         else:
-            live_constraint = "\n\n⚠️【重要提醒】：无需输出 PARTE 0 模块，直接从 PARTE I 开始执行高标准深度双语推演。"
+            live_constraint = "\n\n⚠️【重要提醒：完整版深度模式】：无需输出 PARTE 0 模块，直接从 PARTE I 开始执行高标准深度双语（西语+中文）推演，完整输出 PARTE I/II/III/IV 全部模块。"
 
-        client = OpenAI(api_key=api_key, base_url=base_url, timeout=600.0)
+        client = OpenAI(api_key=active_key, base_url=active_url, timeout=600.0)
         placeholder = st.empty()
         current_full_text = ""
         
         try:
-            with st.spinner("齐大师正在调动命理能量磁场..."):
+            spinner_msg = "齐大师正在快速点评..." if is_live_mode else "齐大师正在调动命理能量磁场，深度推演中..."
+            with st.spinner(spinner_msg):
                 response = client.chat.completions.create(
-                    model=model_name,
+                    model=active_model,
                     messages=[
                         {"role": "system", "content": chosen_prompt + live_constraint},
                         {"role": "user", "content": user_payload}
@@ -360,7 +388,8 @@ if st.session_state.main_report:
         submit_follow_up = st.form_submit_button("发送指令/追问")
 
     if submit_follow_up and user_question:
-        client = OpenAI(api_key=api_key, base_url=base_url, timeout=600.0)
+        # 追问统一走【完整版深度引擎】，保证细挖深度
+        client = OpenAI(api_key=api_key_full, base_url=base_url_full, timeout=600.0)
         active_prompt = PROMPT_DOUBLE if st.session_state.current_prompt_type == "double" else PROMPT_SINGLE
         
         messages = [
@@ -376,7 +405,7 @@ if st.session_state.main_report:
         try:
             with st.spinner("齐大师正在回复..."):
                 resp = client.chat.completions.create(
-                    model=model_name,
+                    model=model_full,
                     messages=messages,
                     stream=False,
                     max_tokens=4000,
