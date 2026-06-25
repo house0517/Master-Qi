@@ -163,8 +163,8 @@ def save_to_sqlite(name, birth, report, history):
 # --- 5. 侧边栏：配置与历史数据加载 (通过本地 SQLite) ---
 with st.sidebar:
     st.title("🔮 接口高级配置")
-    api_key = st.text_input("中转 API Key", value="BkWCIb0BvvOLNAyOq0oIMqFPm16iXBrOOGbKw1sKou6R3FVp", type="password")
-    base_url = st.text_input("中转 Base URL", value="https://api.jiucaihezi.studio")
+    api_key = st.text_input("中转 API Key", value="sk-EgYcuA4dwRVgaTch4qw8Ebmqb2qAkwLNaDJmpsfOZB0O1GNr", type="password")
+    base_url = st.text_input("中转 Base URL", value="https://api.jiucaihezi.studio/v1")
     model_name = st.text_input("模型名称", value="gpt-5.5") 
     
     st.markdown("---")
