@@ -13,6 +13,18 @@ st.set_page_config(page_title="Maestro Qi | 齐大师数字化命理", layout="w
 PROMPT_SINGLE = """
 # System Instruction: 齐大师 (Maestro Qi) - 数字化八字命理与能量管理系统（个人单盘版）
 
+## 【核心要求：直播专用首发模块控制】
+### 📜 PARTE 0: 直播总体简单评价（必须严格执行以下格式）
+1. **语言限制**：本模块【只用中文】输出，严禁夹杂任何西语。
+2. **排版限制**：字数严格控制在 1000 字以内。必须做到【一句话独立成一段】，段与段之间必须空行。文字要极其直白、简单，绝对不要用生僻的算命术语，确保西语翻译软件或同传能 100% 精准翻译。
+3. **核心内容**：
+   - 开头直接点明用户的【生肖（Animal del zodíaco）】和【纳音属性（如：炉中火命、大林木命、城头土命等）】。
+   - 简单直白地描述她未来的核心运势走向（财富、情感或转折点）。
+   - 【诉求对齐】：如果用户输入了“当前核心诉求/想问的具体事项”，必须在 PARTE 0 里面用最简单的白话进行针对性回应和核心方向点拨。
+   - 【钩子文案】：在模块结尾，必须附带一句极其自然的钩子，例如：“如果你想知道你转运、改运、以及手串避坑的细节，你可以加我的主页链接/私信我”。
+
+---
+
 ## 1. 角色设定 (Role Identity)
 * **Name**: 齐大师 (Maestro Qi)
 * **Background**: 你是一位融合了中国道家传统理法（《滴天髓》、《子平真诠》）与现代量化数学模型的顶级命理专家。
@@ -38,7 +50,6 @@ PROMPT_SINGLE = """
 **【语言要求】**：所有内容必须先输出纯正、流畅、富有感染力的西班牙语 (Español)；随后提供 1:1 完整的高级中文翻译，必须是全文翻译，不要缺少某个段落 (Chino)。
 **【字数要求】**：每个模块必须进行深度展开，单语言总字数不得低于 1500 字。
 
-### 📜 PARTE 0: 总体简单评价，只用中文输出，字数大概在1000字以内，一句一段进行输出，描述未来的情况，文字简单，便于翻译后西语用户理解，给到用户是什么生肖，并说明她是什么命，如火命、土命等，并且需要给到钩子，比如：如果你想知道你转运、改运的细节，你可以加这个 (整体简介)
 ### 📜 PARTE I: LA RADIOGRAFÍA DE SU DESTINO (命运X光：过去与本质的全面复盘)
 - **Estructura Base (命盘基础)**: 简述四柱干支结构。
 - **El Ecosistema de su Alma (灵魂生态)**: 描述其日主天性。
@@ -61,13 +72,24 @@ PROMPT_SINGLE = """
 ## 5. 严格约束 (Strict Constraints)
 - 绝对禁止使用拼音替代十神。涉及疾病时声明“形而上学不替代医学诊断”。
 - 补充规则：如果遇到字数限制无法一次性输出全文，请在结尾提示用户“内容过多，请点击追问以获取余下部分”。
-"""
 
 # ==========================================
 # --- 2B. 纯双人合盘系统指令 (PROMPT_DOUBLE) ---
 # ==========================================
 PROMPT_DOUBLE = """
 # System Instruction: 齐大师 (Maestro Qi) - 双人命运合盘与能量交织系统（Sinastría de Destino）
+
+## 【核心要求：直播专用首发模块控制】
+### 📜 PARTE 0: 直播总体简单评价（必须严格执行以下格式）
+1. **语言限制**：本模块【只用中文】输出，严禁夹杂任何西语。
+2. **排版限制**：字数严格控制在 1000 字以内。必须做到【一句话独立成一段】，段与段之间必须空行，文字通俗易懂，便于翻译。
+3. **核心内容**：
+   - 开头直接点明【对象 A】和【对象 B】各自的【生肖】和【纳音命理属性（如火命、土命）】。
+   - 用大白话一句话一段地指出这两个人磁场是“互相滋养”还是“互相消耗”，未来两人的发展概况。
+   - 【诉求对齐】：如果用户给出了具体的合盘痛点诉求，必须在此处用极简的白话直接点破核心。
+   - 【钩子文案】：在结尾附带引导，例如：“如果你想知道你们两人感情复合、正缘应期、商业合伙破局的细节，可以点击主页进一步细看”。
+
+---
 
 ## 1. 角色设定 (Role Identity)
 * **Name**: 齐大师 (Maestro Qi)
@@ -112,11 +134,10 @@ if "chat_history" not in st.session_state:
 if "current_prompt_type" not in st.session_state:
     st.session_state.current_prompt_type = "single"
 
-# --- 4. SQLite 本地数据库建表初始化 ---
+# --- 4. SQLite 本地数据库初始化 ---
 def init_db():
     conn = sqlite3.connect('fortunes.db')
     c = conn.cursor()
-    # 创建本地轻量表结构
     c.execute('''
         CREATE TABLE IF NOT EXISTS records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,7 +151,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-init_db() # 启动时确保数据库就绪
+init_db()
 
 def save_to_sqlite(name, birth, report, history):
     try:
@@ -139,54 +160,56 @@ def save_to_sqlite(name, birth, report, history):
         history_str = str(history)
         date_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        # 查重：看有没有同名同生辰的已有客户档案
         c.execute("SELECT id FROM records WHERE name=? AND birth_info=?", (str(name), str(birth)))
         row = c.fetchone()
         
         if row:
-            # 存在则覆写更新
             c.execute("UPDATE records SET report=?, history=?, date=? WHERE id=?", 
                       (str(report), history_str, date_now, row[0]))
         else:
-            # 不存在则插入新行
             c.execute("INSERT INTO records (name, birth_info, report, history, date) VALUES (?, ?, ?, ?, ?)",
                       (str(name), str(birth), str(report), history_str, date_now))
         
         conn.commit()
         conn.close()
-        st.toast("⚡ 齐大师永久记忆已同步至本地数据库！")
+        st.toast("⚡ 齐大师永久记忆已同步！")
         return True
     except Exception as e:
-        st.error(f"本地数据库写入失败: {e}")
+        st.error(f"数据库写入失败: {e}")
         return False
 
-# --- 5. 侧边栏：配置与历史数据加载 (通过本地 SQLite) ---
+# --- 5. 侧边栏 ---
 with st.sidebar:
     st.title("🔮 接口高级配置")
+    # 【已按要求锁死】：全量默认配置更换为你发我的最新可用中转数据
     api_key = st.text_input("中转 API Key", value="sk-EgYcuA4dwRVgaTch4qw8Ebmqb2qAkwLNaDJmpsfOZB0O1GNr", type="password")
     base_url = st.text_input("中转 Base URL", value="https://api.jiucaihezi.studio/v1")
     model_name = st.text_input("模型名称", value="gpt-5.5") 
     
     st.markdown("---")
-    st.title("📂 永久云端档案库 (SQLite)")
+    # 【直播功能开关组件】
+    st.subheader("📺 直播间推流设置")
+    is_live_mode = st.toggle("开启直播专用简评 (PARTE 0)", value=True, help="开启后，AI会在报告最前方额外输出一段1000字以内、一句一段、纯中文的极简生肖与命理点评，并自带钩子文案及核心诉求解答。")
     
-    # 从本地库拉取下拉单数据
+    st.markdown("---")
+    st.title("📂 永久档案库")
+    
     conn = sqlite3.connect('fortunes.db')
     c = conn.cursor()
-    c.execute("SELECT name, date, id FROM records ORDER BY id DESC")
+    c.execute("SELECT name, birth_info, date, id FROM records ORDER BY id DESC")
     history_list = c.fetchall()
     conn.close()
     
     if history_list:
-        options = {f"{row[0]} ({row[1]})": row[2] for row in history_list}
-        selected_label = st.selectbox("调取云端往期档案", ["-- 请选择 --"] + list(options.keys()))
+        options = {f"{row[0]} (生日: {row[1]}) [{row[2]}]": row[3] for row in history_list}
+        selected_label = st.selectbox("调取历史档案", ["-- 请选择 --"] + list(options.keys()))
         
         if selected_label != "-- 请选择 --":
             if st.button("一键加载档案"):
                 record_id = options[selected_label]
                 conn = sqlite3.connect('fortunes.db')
                 c = conn.cursor()
-                c.execute("SELECT report, history FROM records WHERE id=?", (record_id,))
+                c.execute("SELECT report, history, name, birth_info FROM records WHERE id=?", (record_id,))
                 res = c.fetchone()
                 conn.close()
                 
@@ -197,14 +220,14 @@ with st.sidebar:
                     except:
                         st.session_state.chat_history = []
                     
-                    if "&" in selected_label:
+                    if "&" in str(res[2]):
                         st.session_state.current_prompt_type = "double"
                     else:
                         st.session_state.current_prompt_type = "single"
-                    st.success(f"已恢复 {selected_label} 的历史档案")
+                    st.success(f"已恢复档案")
                     st.rerun()
     else:
-        st.caption("💡 暂无历史测算档案，测算一次后会自动显示。")
+        st.caption("💡 暂无历史测算档案。")
 
 # --- 6. 主界面 ---
 st.title("🕯️ Maestro Qi: Alquimia de Destino")
@@ -266,7 +289,7 @@ with tab_double:
         chosen_prompt = PROMPT_DOUBLE
         st.session_state.current_prompt_type = "double"
 
-# --- 7. 动态匹配执行与数据本地持久化 ---
+# --- 7. 动态匹配执行与数据持久化 ---
 if user_payload and chosen_prompt:
     if not api_key:
         st.error("请先输入 API Key")
@@ -274,6 +297,13 @@ if user_payload and chosen_prompt:
         st.session_state.chat_history = []
         st.session_state.main_report = "" 
         
+        # 动态拼接直播间模式附加指令
+        live_constraint = ""
+        if is_live_mode:
+            live_constraint = "\n\n⚠️【重要提醒】：当前处于直播间快速推流模式下，你必须首先输出【### 📜 PARTE 0: 直播总体简单评价】模块。确保满足纯中文、1000字以内、一句一段（段间空行）、直白通俗、明确包含生肖与纳音五行属性、精准解答核心具体诉求以及自带转化钩子文案的要求！"
+        else:
+            live_constraint = "\n\n⚠️【重要提醒】：无需输出 PARTE 0 模块，直接从 PARTE I 开始执行高标准深度双语推演。"
+
         client = OpenAI(api_key=api_key, base_url=base_url, timeout=600.0)
         placeholder = st.empty()
         current_full_text = ""
@@ -283,7 +313,7 @@ if user_payload and chosen_prompt:
                 response = client.chat.completions.create(
                     model=model_name,
                     messages=[
-                        {"role": "system", "content": chosen_prompt},
+                        {"role": "system", "content": chosen_prompt + live_constraint},
                         {"role": "user", "content": user_payload}
                     ],
                     stream=True,
@@ -299,7 +329,9 @@ if user_payload and chosen_prompt:
                 placeholder.markdown(current_full_text)
                 st.session_state.main_report = current_full_text
                 
-                # 安全执行本地 SQLite 档案保存
+                st.session_state['last_name'] = final_name
+                st.session_state['last_birth'] = final_birth
+                
                 save_to_sqlite(final_name, final_birth, current_full_text, st.session_state.chat_history)
                 st.success("推演报告已成功保存至本地库。")
                 st.rerun()
@@ -331,7 +363,7 @@ if st.session_state.main_report:
         active_prompt = PROMPT_DOUBLE if st.session_state.current_prompt_type == "double" else PROMPT_SINGLE
         
         messages = [
-            {"role": "system", "content": active_prompt},
+            {"role": "system", "content": active_prompt + "\n\n⚠️【严厉约束】：在回答后续追问时，你必须严格继承主报告中已经给出的所有测算结论和特定手串推荐方案，绝对禁止前后矛盾！"},
             {"role": "assistant", "content": st.session_state.main_report}
         ]
         for chat in st.session_state.chat_history:
@@ -346,13 +378,13 @@ if st.session_state.main_report:
                     model=model_name,
                     messages=messages,
                     stream=False,
-                    max_tokens=4000
+                    max_tokens=4000,
+                    temperature=0.3 
                 )
                 new_answer = resp.choices[0].message.content
                 st.session_state.chat_history.append({"question": user_question, "answer": new_answer})
                 
-                # 连同追问一起同步更新至本地 SQLite
-                save_to_sqlite(final_name if final_name else "Cloud_User", final_birth if final_birth else "Cloud_Birth", st.session_state.main_report, st.session_state.chat_history)
+                save_to_sqlite(st.session_state.get('last_name', 'Cloud_User'), st.session_state.get('last_birth', 'Cloud_Birth'), st.session_state.main_report, st.session_state.chat_history)
                 st.rerun()
         except Exception as e:
             st.error(f"追问失败：{e}")
