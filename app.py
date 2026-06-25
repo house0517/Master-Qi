@@ -72,6 +72,7 @@ PROMPT_SINGLE = """
 ## 5. 严格约束 (Strict Constraints)
 - 绝对禁止使用拼音替代十神。涉及疾病时声明“形而上学不替代医学诊断”。
 - 补充规则：如果遇到字数限制无法一次性输出全文，请在结尾提示用户“内容过多，请点击追问以获取余下部分”。
+"""
 
 # ==========================================
 # --- 2B. 纯双人合盘系统指令 (PROMPT_DOUBLE) ---
@@ -217,7 +218,7 @@ with st.sidebar:
                     st.session_state.main_report = res[0]
                     try:
                         st.session_state.chat_history = ast.literal_eval(res[1])
-                    except:
+                    except (ValueError, SyntaxError):
                         st.session_state.chat_history = []
                     
                     if "&" in str(res[2]):
